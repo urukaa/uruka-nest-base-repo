@@ -6,6 +6,7 @@ import { PrismaService } from './prisma.service';
 import { ValidationService } from './validation.service';
 import { ErrorFilter } from './error.filter';
 import { APP_FILTER } from '@nestjs/core';
+import { R2Service } from './r2.service';
 
 @Global()
 @Module({
@@ -22,7 +23,8 @@ import { APP_FILTER } from '@nestjs/core';
     PrismaService,
     ValidationService,
     { provide: APP_FILTER, useClass: ErrorFilter },
+    R2Service
   ],
-  exports: [PrismaService, ValidationService],
+  exports: [PrismaService, ValidationService, R2Service],
 })
 export class CommonModule {}
