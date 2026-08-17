@@ -1,0 +1,13 @@
+# pnpm memblokir semua install script secara default (proteksi supply-chain).
+# Daftar ini adalah pengecualian yang disengaja — tanpanya, native binding dan
+# engine Prisma tidak terpasang dan aplikasi gagal saat runtime.
+#
+# Yang bernilai `false` sengaja ditolak: keduanya hanya telemetry / pesan donasi
+# saat install, tidak ada kaitannya dengan fungsi aplikasi.
+allowBuilds:
+  '@prisma/engines': true # unduh query engine
+  prisma: true # preinstall CLI
+  bcrypt: true # native binding
+  '@swc/core': true # native binary
+  '@nestjs/core': false # pesan donasi
+  '@scarf/scarf': false # telemetry

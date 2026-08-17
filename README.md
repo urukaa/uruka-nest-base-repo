@@ -15,11 +15,23 @@
 
 ## Setup
 
+This repo uses **pnpm**, pinned via the `packageManager` field. corepack ships
+with Node, so enabling it once is all that is needed:
+
+```powershell
+corepack enable pnpm
+```
+
 ```powershell
 git clone <repo> && cd nest
-npm install
+pnpm install
 cp example.env .env
 ```
+
+> [!IMPORTANT]
+> pnpm blocks install scripts by default. The packages allowed to run one are
+> listed explicitly in `pnpm-workspace.yaml` — add to `allowBuilds` when you
+> introduce a native dependency, or it will fail at runtime rather than install.
 
 Fill in `.env`. Two groups are validated lazily rather than at boot:
 
@@ -30,21 +42,21 @@ Fill in `.env`. Two groups are validated lazily rather than at boot:
 Everything else is required at boot. Then:
 
 ```powershell
-npx prisma generate
-npx prisma migrate dev --name <migration_name>
+pnpm exec prisma generate
+pnpm exec prisma migrate dev --name <migration_name>
 ```
 
 ## Running The App
 
 ```bash
 # development
-npm run start
+pnpm start
 
-# watch mode  (note the colon — `npm run start dev` is NOT watch mode)
-npm run start:dev
+# watch mode  (note the colon — `pnpm start` alone is NOT watch mode)
+pnpm start:dev
 
 # production
-npm run build && npm run start:prod
+pnpm build && pnpm start:prod
 ```
 
 Swagger is served at `/api/docs` whenever `IS_VO1D_PRODUCTION=mboten`.
@@ -60,8 +72,8 @@ of rotation. A 200 means the process *and* its database are reachable:
 ## Run tests
 
 ```bash
-npm run test
-npm run test:cov
+pnpm test
+pnpm test:cov
 ```
 
 Specs live in `test/` and are collected from `src/` too. `test/setup-env.ts`
@@ -104,16 +116,17 @@ nothing imports them at runtime.
 All in **seconds**, all optional — leave a variable empty to take its default.
 A value that is present but not a positive number throws at boot.
 
-| Variable                   | Default | Effect                                        |
-| -------------------------- | ------- | --------------------------------------------- |
-| `SIGNATURE_WINDOW_SECONDS` | `300`   | How long an `x-signature` stays valid         |
-| `THROTTLE_TTL_SECONDS`     | `60`    | Rate-limit window                             |
-| `THROTTLE_LIMIT`           | `100`   | Requests allowed per window, per IP           |
-| `JWT_EXPIRE_IN`            | —       | Required. Seconds, or an `ms` duration (`7d`)  |
+| Variable                   | Default | Effect                                       |
+| -------------------------- | ------- | -------------------------------------------- |
+| `SIGNATURE_WINDOW_SECONDS` | `60`    | How long an `x-signature` stays valid        |
+| `THROTTLE_TTL_SECONDS`     | `60`    | Rate-limit window                            |
+| `THROTTLE_LIMIT`           | `100`   | Requests allowed per window, per IP          |
+| `JWT_EXPIRE_IN`            | —       | Required. Seconds, or an `ms` duration (`7d`) |
 
-`SIGNATURE_WINDOW_SECONDS=60` is a reasonable tightening: it cuts the replay
-window fivefold, and since both ends are servers you control, clock skew is
-small. Raise `THROTTLE_LIMIT` if the default gets in the way during development.
+The 60-second signature window assumes both ends are servers you control, so
+clock skew is small. Widen it only if you see spurious `Request expired.`
+rejections. Raise `THROTTLE_LIMIT` if the default gets in the way during
+development.
 
 ## Request signing
 
@@ -123,7 +136,7 @@ When `IS_VO1D_TESTING=mboten`, every route outside `SecurityMiddleware`'s
 | Header        | Value                                     |
 | ------------- | ----------------------------------------- |
 | `x-app-key`   | `APP_KEY`                                 |
-| `x-timestamp` | ISO-8601, within 5 minutes of server time |
+| `x-timestamp` | ISO-8601, within `SIGNATURE_WINDOW_SECONDS` of server time |
 | `x-signature` | see below                                 |
 | `User-Agent`  | non-empty; `Vo1dApp` in production        |
 
@@ -138,8 +151,8 @@ const signature = crypto
 
 Note that the signature is **not bound to the endpoint** — it covers only the
 timestamp and app name, so one signature is valid for any route inside the
-5-minute window. What actually constrains it is the IP allowlist below. Keep
-that in mind before exposing this API to a caller you do not control.
+window. What actually constrains it is the IP allowlist below. Keep that in mind
+before exposing this API to a caller you do not control.
 
 The request IP must appear in `ALLOWED_IPS` (defaults to localhost). Behind a
 reverse proxy, set `TRUST_PROXY` so `req.ip` is the client rather than the
