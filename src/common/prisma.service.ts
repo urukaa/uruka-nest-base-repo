@@ -5,10 +5,49 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { WINSTON_MODULE_PROVIDER } from 'nest-winston';
 import { Logger } from 'winston';
-import { requireEnv } from './env';
+import { isProduction, requireEnv } from './env';
+
+/**
+ * Query events carry the SQL and its parameters, so they stay out of
+ * production logs where they would leak user data into the log sink.
+ *
+ * Read lazily, never at module scope: this file is imported through
+ * CommonModule before AppModule's `@Module` decorator runs, so at import time
+ * ConfigModule has not yet loaded .env into process.env.
+ */
+function shouldLogQueries(): boolean {
+  return !isProduction();
+}
+
+function buildLogLevels(): Prisma.LogDefinition[] {
+  const levels: Prisma.LogDefinition[] = [
+    { emit: 'event', level: 'info' },
+    { emit: 'event', level: 'warn' },
+    { emit: 'event', level: 'error' },
+  ];
+
+  if (shouldLogQueries()) {
+    levels.push({ emit: 'event', level: 'query' });
+  }
+
+  return levels;
+}
+
+/**
+ * PrismaClient only exposes a typed `$on` when its log option is a literal
+ * tuple, which a conditionally-built array cannot be. This narrows the event
+ * surface instead of casting the whole client to `any`.
+ */
+interface PrismaEventEmitter {
+  $on(
+    event: 'info' | 'warn' | 'error',
+    callback: (event: Prisma.LogEvent) => void,
+  ): void;
+  $on(event: 'query', callback: (event: Prisma.QueryEvent) => void): void;
+}
 
 @Injectable()
 export class PrismaService
@@ -22,33 +61,20 @@ export class PrismaService
       adapter: new PrismaPg({
         connectionString: requireEnv('DATABASE_URL'),
       }),
-      log: [
-        { emit: 'event', level: 'info' },
-        { emit: 'event', level: 'warn' },
-        { emit: 'event', level: 'error' },
-        { emit: 'event', level: 'query' },
-      ],
+      log: buildLogLevels(),
     });
   }
 
   onModuleInit() {
-    const prismaAny = this as any;
+    const events = this as unknown as PrismaEventEmitter;
 
-    prismaAny.$on('info', (e) => {
-      this.logger.info(e);
-    });
+    events.$on('info', (event) => this.logger.info(event));
+    events.$on('warn', (event) => this.logger.warn(event));
+    events.$on('error', (event) => this.logger.error(event));
 
-    prismaAny.$on('warn', (e) => {
-      this.logger.warn(e);
-    });
-
-    prismaAny.$on('error', (e) => {
-      this.logger.error(e);
-    });
-
-    prismaAny.$on('query', (e) => {
-      this.logger.debug(e);
-    });
+    if (shouldLogQueries()) {
+      events.$on('query', (event) => this.logger.debug(event));
+    }
   }
 
   async onModuleDestroy() {

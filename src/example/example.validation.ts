@@ -1,9 +1,7 @@
-import z from "zod";
+import z from 'zod';
 
 export class ExampleValidation {
-  static readonly CREATE = z.object({
-
-  });
+  static readonly CREATE = z.object({});
 
   static readonly UPDATE = this.CREATE.partial();
 }

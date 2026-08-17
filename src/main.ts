@@ -1,21 +1,41 @@
+import { LoggerService } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
-import { appBanner, displayAsciiArt } from './utils/ascii.utils';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { requireEnv } from './common/env';
-import { SecurityMiddleware } from './middleware/security.middleware';
+import helmet from 'helmet';
+import { AppModule } from './app.module';
+import { appBanner, displayAsciiArt } from './utils/ascii.utils';
+import { envList, isProduction, optionalEnv, requireEnv } from './common/env';
 
 async function bootstrap() {
-  console.log('PORT:', process.env.PORT);
   displayAsciiArt(appBanner);
-  const app = await NestFactory.create(AppModule);
+
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   //  LOGGING
-  const logger = app.get(WINSTON_MODULE_NEST_PROVIDER);
+  const logger = app.get<LoggerService>(WINSTON_MODULE_NEST_PROVIDER);
   app.useLogger(logger);
 
-  if (requireEnv('IS_VO1D_PRODUCTION') === `mboten`) {
+  // Lets PrismaService.onModuleDestroy run on SIGTERM/SIGINT.
+  app.enableShutdownHooks();
+
+  // Required for req.ip to reflect the client rather than the proxy when the
+  // app runs behind nginx/Cloudflare. Leave off otherwise: it makes
+  // X-Forwarded-For spoofable, which the middleware's IP allowlist trusts.
+  if (optionalEnv('TRUST_PROXY', '') !== '') {
+    app.set('trust proxy', optionalEnv('TRUST_PROXY', '1'));
+  }
+
+  // SECURITY HEADERS
+  app.use(
+    helmet({
+      // Swagger UI needs inline styles/scripts; CSP is off where docs are served.
+      contentSecurityPolicy: isProduction(),
+    }),
+  );
+
+  if (!isProduction()) {
     // API DOCS WITH SWAGGER
     const swaggerConfig = new DocumentBuilder()
       .setTitle('PROJECT NAME API')
@@ -29,10 +49,7 @@ async function bootstrap() {
   }
 
   // CORS ORIGIN
-  const rawOrigins = requireEnv('ORIGINS') || 'http://127.0.0.1:3000';
-  const allowedOrigins = rawOrigins
-    ? rawOrigins.split(',').map((origin) => origin.trim())
-    : ['*'];
+  const allowedOrigins = envList('ORIGINS', ['http://127.0.0.1:3000']);
 
   app.enableCors({
     origin: allowedOrigins,
@@ -47,12 +64,10 @@ async function bootstrap() {
     credentials: true, // Izinkan cookies
   });
 
-  // APP_KEY MIDDLEWARE
-  if (requireEnv('IS_VO1D_TESTING') === `mboten`) {
-    const securityMiddleware = new SecurityMiddleware();
-    app.use(securityMiddleware.use.bind(securityMiddleware));
-  }
-
   await app.listen(Number(requireEnv('PORT')));
 }
-bootstrap();
+
+bootstrap().catch((error) => {
+  console.error('Failed to start application:', error);
+  process.exit(1);
+});

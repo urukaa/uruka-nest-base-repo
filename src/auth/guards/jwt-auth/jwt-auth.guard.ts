@@ -1,35 +1,12 @@
-import {
-  Injectable,
-  ExecutionContext,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { PrismaService } from 'src/common/prisma.service';
 
+/**
+ * Verifies the Bearer token via JwtStrategy.
+ *
+ * If you add token revocation later, override `canActivate`, call
+ * `super.canActivate(context)` first, then check the raw token against your
+ * blacklist store. The `tokenBlacklist` model does not exist in the schema yet.
+ */
 @Injectable()
-export class JwtAuthGuard extends AuthGuard('jwt') {
-  constructor(private readonly prisma: PrismaService) {
-    super();
-  }
-
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Jalankan verifikasi JWT lebih dulu
-    const isAllowed = (await super.canActivate(context)) as boolean;
-    if (!isAllowed) return false;
-
-    const req = context.switchToHttp().getRequest();
-    const token = req.headers.authorization?.split(' ')[1];
-
-    // if (token) {
-    //   const blacklisted = await this.prisma.tokenBlacklist.findFirst({
-    //     where: { token },
-    //   });
-
-    //   if (blacklisted) {
-    //     throw new UnauthorizedException('Token is blacklisted');
-    //   }
-    // }
-
-    return true;
-  }
-}
+export class JwtAuthGuard extends AuthGuard('jwt') {}

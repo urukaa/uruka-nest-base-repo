@@ -1,21 +1,39 @@
 // src/auth/config/jwt.config.ts
 import { registerAs } from '@nestjs/config';
+import type { SignOptions } from 'jsonwebtoken';
 import { requireEnv } from 'src/common/env';
+
+/** `ms`-style durations accepted by jsonwebtoken, e.g. `30m`, `7d`. */
+const DURATION_PATTERN = /^\d+(\.\d+)?\s*(ms|s|m|h|d|w|y)$/i;
+
+type ExpiresIn = NonNullable<SignOptions['expiresIn']>;
 
 export default registerAs('jwt', () => {
   const secret = requireEnv('JWT_SECRET');
-  const expiresIn = Number(requireEnv('JWT_EXPIRE_IN')); // 1 hari
+  const raw = requireEnv('JWT_EXPIRE_IN').trim();
 
-  if (!secret) {
-    throw new Error('JWT_SECRET is not defined');
+  if (!raw) {
+    throw new Error('JWT_EXPIRE_IN is set but empty');
   }
 
-  if (Number.isNaN(expiresIn)) {
-    throw new Error('JWT_EXPIRE_IN must be a number (seconds)');
+  // Accept a bare number (seconds) or an `ms`-style duration such as `7d`.
+  let expiresIn: ExpiresIn;
+  const seconds = Number(raw);
+
+  if (Number.isFinite(seconds)) {
+    if (seconds <= 0) {
+      throw new Error(`JWT_EXPIRE_IN must be greater than 0, got "${raw}"`);
+    }
+    expiresIn = seconds;
+  } else {
+    if (!DURATION_PATTERN.test(raw)) {
+      throw new Error(
+        `JWT_EXPIRE_IN must be seconds (e.g. 86400) or a duration (e.g. 7d), got "${raw}"`,
+      );
+    }
+    // Safe: DURATION_PATTERN is exactly the shape `ms` (and so StringValue) accepts.
+    expiresIn = raw as ExpiresIn;
   }
 
-  return {
-    secret,
-    expiresIn,
-  };
+  return { secret, signOptions: { expiresIn } };
 });

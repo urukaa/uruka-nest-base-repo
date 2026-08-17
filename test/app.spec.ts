@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
-import * as request from 'supertest';
+import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 
@@ -16,13 +16,34 @@ describe('HealthycheckController ()', () => {
     await app.init();
   });
 
+  afterEach(async () => {
+    await app.close();
+  });
+
   describe('/health (GET)', () => {
     it('should return status ok', async () => {
       const res = await request(app.getHttpServer())
         .get('/api/health')
         .expect(200);
 
-      expect(res.body.status).toBe('ok');
+      expect((res.body as { status: string }).status).toBe('ok');
+    });
+  });
+
+  describe('unknown routes', () => {
+    it('returns the unified error envelope', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/api/does-not-exist')
+        .expect(404);
+
+      const body = res.body as Record<string, unknown>;
+
+      expect(body).toMatchObject({
+        statusCode: 404,
+        path: '/api/does-not-exist',
+      });
+      expect(typeof body.message).toBe('string');
+      expect(typeof body.timestamp).toBe('string');
     });
   });
 });

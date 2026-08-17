@@ -6,4 +6,4 @@ import { HealthyCheckController } from './healthycheck.controller';
   providers: [HealthyCheckService],
   controllers: [HealthyCheckController],
 })
-export class healthyCheckModule {}
+export class HealthyCheckModule {}
