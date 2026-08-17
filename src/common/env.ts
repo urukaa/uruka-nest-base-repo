@@ -41,5 +41,23 @@ export function envList(name: string, fallback: string[] = []): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Reads a positive number, falling back when unset. Throws on a value that is
+ * present but unusable, so a typo fails at boot rather than silently becoming
+ * NaN somewhere downstream.
+ */
+export function envNumber(name: string, fallback: number): number {
+  const raw = optionalEnv(name, '');
+  if (!raw) return fallback;
+
+  const value = Number(raw);
+
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`${name} must be a positive number, got "${raw}"`);
+  }
+
+  return value;
+}
+
 export const isProduction = (): boolean => envToggle('IS_VO1D_PRODUCTION');
 export const isTesting = (): boolean => envToggle('IS_VO1D_TESTING');

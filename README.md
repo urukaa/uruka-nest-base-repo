@@ -73,7 +73,7 @@ supplies a baseline environment, so the suite runs on a fresh clone with no
 ```
 AppModule
 ├─ ConfigModule      (global; loads jwtConfig + r2Config)
-├─ ThrottlerModule   (100 req/min per IP, enforced by a global guard)
+├─ ThrottlerModule   (rate limit per IP, enforced by a global guard)
 ├─ CommonModule      (@Global: PrismaService, ValidationService, R2Service, ErrorFilter)
 ├─ MiddlewareModule  (SecurityMiddleware on every route)
 └─ HealthyCheckModule
@@ -98,6 +98,22 @@ nothing imports them at runtime.
 | -------------------- | -------------------------------------------------------- | ------------------------------------------------ |
 | `IS_VO1D_PRODUCTION` | Swagger off, `Vo1dApp` User-Agent only, no query logging | Swagger on, relaxed User-Agent, query logging on |
 | `IS_VO1D_TESTING`    | `SecurityMiddleware` bypassed                            | `SecurityMiddleware` enforced                    |
+
+## Tunable limits
+
+All in **seconds**, all optional — leave a variable empty to take its default.
+A value that is present but not a positive number throws at boot.
+
+| Variable                   | Default | Effect                                        |
+| -------------------------- | ------- | --------------------------------------------- |
+| `SIGNATURE_WINDOW_SECONDS` | `300`   | How long an `x-signature` stays valid         |
+| `THROTTLE_TTL_SECONDS`     | `60`    | Rate-limit window                             |
+| `THROTTLE_LIMIT`           | `100`   | Requests allowed per window, per IP           |
+| `JWT_EXPIRE_IN`            | —       | Required. Seconds, or an `ms` duration (`7d`)  |
+
+`SIGNATURE_WINDOW_SECONDS=60` is a reasonable tightening: it cuts the replay
+window fivefold, and since both ends are servers you control, clock skew is
+small. Raise `THROTTLE_LIMIT` if the default gets in the way during development.
 
 ## Request signing
 

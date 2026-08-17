@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { CommonModule } from './common/common.module';
 import { HealthyCheckModule } from './healthy_check/healthycheck.module';
 import { MiddlewareModule } from './middleware/middleware.module';
+import { envNumber } from './common/env';
 import jwtConfig from './auth/config/jwt.config';
 import r2Config from './config/r2.config';
 
@@ -15,8 +16,17 @@ import r2Config from './config/r2.config';
       load: [jwtConfig, r2Config], // All configs are loaded here
     }),
 
-    ThrottlerModule.forRoot({
-      throttlers: [{ ttl: 60_000, limit: 100 }], // 100 request / minute / IP
+    // forRootAsync, not forRoot: the factory runs during DI, so it cannot read
+    // env before ConfigModule has loaded .env regardless of import order.
+    ThrottlerModule.forRootAsync({
+      useFactory: () => ({
+        throttlers: [
+          {
+            ttl: envNumber('THROTTLE_TTL_SECONDS', 60) * 1000,
+            limit: envNumber('THROTTLE_LIMIT', 100),
+          },
+        ],
+      }),
     }),
 
     CommonModule,

@@ -1,7 +1,13 @@
 import { ForbiddenException, Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import * as crypto from 'crypto';
-import { envList, isProduction, isTesting, requireEnv } from 'src/common/env';
+import {
+  envList,
+  envNumber,
+  isProduction,
+  isTesting,
+  requireEnv,
+} from 'src/common/env';
 
 /** Compares two strings without leaking match position through timing. */
 function safeEqual(a: string, b: string): boolean {
@@ -21,7 +27,9 @@ export class SecurityMiddleware implements NestMiddleware {
     '127.0.0.1', // Localhost
     '::1', // IPv6 localhost
   ]);
-  private readonly lifespanMinutes = 5; // lifespan 5 menit
+  // Signature Window. Default 60 seconds (1 minute)
+  private readonly signatureWindowMs =
+    envNumber('SIGNATURE_WINDOW_SECONDS', 60) * 1000;
 
   private readonly openPaths = [
     '/api/health',
@@ -84,9 +92,8 @@ export class SecurityMiddleware implements NestMiddleware {
     }
 
     const now = Date.now();
-    const lifespanMs = this.lifespanMinutes * 60 * 1000; // menit ke ms
 
-    if (Math.abs(now - requestTime) > lifespanMs) {
+    if (Math.abs(now - requestTime) > this.signatureWindowMs) {
       throw new ForbiddenException('Request expired.');
     }
 
