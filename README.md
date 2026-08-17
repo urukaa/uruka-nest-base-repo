@@ -48,7 +48,14 @@ npm run build && npm run start:prod
 ```
 
 Swagger is served at `/api/docs` whenever `IS_VO1D_PRODUCTION=mboten`.
-Health check: `GET /api/health`.
+
+`GET /api/health` runs `SELECT 1` against the database and answers **503** when
+that fails or takes longer than 3s, so an orchestrator can pull the instance out
+of rotation. A 200 means the process *and* its database are reachable:
+
+```json
+{ "status": "ok", "service": "api", "database": "up", "timestamp": "..." }
+```
 
 ## Run tests
 

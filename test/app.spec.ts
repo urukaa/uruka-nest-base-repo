@@ -3,14 +3,20 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { PrismaService } from './../src/common/prisma.service';
 
 describe('HealthycheckController ()', () => {
   let app: INestApplication<App>;
 
   beforeEach(async () => {
+    // The health check now queries the database, so it is stubbed here to keep
+    // these route-level assertions independent of a running Postgres.
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(PrismaService)
+      .useValue({ $queryRaw: jest.fn().mockResolvedValue([{ '1': 1 }]) })
+      .compile();
 
     app = moduleFixture.createNestApplication();
     await app.init();

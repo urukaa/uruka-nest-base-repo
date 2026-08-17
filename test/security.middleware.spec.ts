@@ -4,6 +4,7 @@ import * as crypto from 'crypto';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { PrismaService } from '../src/common/prisma.service';
 
 const APP_KEY = 'test-app-key';
 const APP_SECRET = 'test-app-secret';
@@ -30,7 +31,12 @@ describe('SecurityMiddleware', () => {
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      // /api/health is used below purely to prove the middleware lets open
+      // paths through, so its database dependency is stubbed out.
+      .overrideProvider(PrismaService)
+      .useValue({ $queryRaw: jest.fn().mockResolvedValue([{ '1': 1 }]) })
+      .compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
