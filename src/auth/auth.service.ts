@@ -153,29 +153,134 @@ export class AuthService {
     });
   }
 
+  /**
+   * Rotates a refresh token: the presented one is spent, a fresh pair is
+   * issued, and the two are chained so a replay can be spotted later.
+   */
+  async refresh(request: unknown): Promise<AuthResponse> {
+    const dto = this.validation.validate(AuthValidation.REFRESH, request);
+
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash: AuthService.hashRefreshToken(dto.refreshToken) },
+      include: { user: { select: publicUser } },
+    });
+
+    if (!stored) {
+      throw new UnauthorizedException('Invalid refresh token.');
+    }
+
+    // Already rotated, yet someone still holds it — the only explanation is a
+    // captured copy. Which of the two parties is the thief is unknowable, so
+    // every session for this user is torn down and both must log in again.
+    if (stored.revokedAt) {
+      await this.revokeAllForUser(stored.userId);
+
+      this.logger.error({
+        message: 'Refresh token reuse detected — all sessions revoked',
+        userId: stored.userId,
+        tokenId: stored.id,
+      });
+
+      throw new UnauthorizedException('Invalid refresh token.');
+    }
+
+    if (stored.expiresAt <= new Date()) {
+      throw new UnauthorizedException('Refresh token expired.');
+    }
+
+    // Conditional, not a plain update: two requests can arrive with the same
+    // token, and only one may win. A count of 0 means the other already spent
+    // it, so this caller gets nothing rather than a second valid pair.
+    const claimed = await this.prisma.refreshToken.updateMany({
+      where: { id: stored.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    if (claimed.count !== 1) {
+      throw new UnauthorizedException('Invalid refresh token.');
+    }
+
+    const issued = await this.createRefreshToken(stored.user.id);
+
+    await this.prisma.refreshToken.update({
+      where: { id: stored.id },
+      data: { replacedById: issued.id },
+    });
+
+    return {
+      user: stored.user,
+      accessToken: this.signAccessToken(stored.user),
+      refreshToken: issued.token,
+    };
+  }
+
+  /** Ends one session. Deliberately silent about whether the token existed. */
+  async logout(request: unknown): Promise<void> {
+    const dto = this.validation.validate(AuthValidation.REFRESH, request);
+
+    await this.prisma.refreshToken.updateMany({
+      where: {
+        tokenHash: AuthService.hashRefreshToken(dto.refreshToken),
+        revokedAt: null,
+      },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  /** Ends every session for a user — password change, or a suspected theft. */
+  async revokeAllForUser(userId: number): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   async issueTokens(
     userId: number,
     username: string,
     role: User['role'],
   ): Promise<TokenPair> {
-    const payload: AuthJwtPayload = { sub: userId, username, role };
-    const accessToken = this.jwt.sign(payload);
+    const { token } = await this.createRefreshToken(userId);
 
+    return {
+      accessToken: this.signAccessToken({ id: userId, username, role }),
+      refreshToken: token,
+    };
+  }
+
+  private signAccessToken(user: {
+    id: number;
+    username: string;
+    role: User['role'];
+  }): string {
+    const payload: AuthJwtPayload = {
+      sub: user.id,
+      username: user.username,
+      role: user.role,
+    };
+
+    return this.jwt.sign(payload);
+  }
+
+  private async createRefreshToken(
+    userId: number,
+  ): Promise<{ token: string; id: string }> {
     // Opaque random string, not a JWT: this token's authority comes from the
     // database row, so there is nothing to encode and nothing to verify offline.
-    const refreshToken = crypto.randomBytes(32).toString('hex');
+    const token = crypto.randomBytes(32).toString('hex');
 
-    await this.prisma.refreshToken.create({
+    const row = await this.prisma.refreshToken.create({
       data: {
-        tokenHash: AuthService.hashRefreshToken(refreshToken),
+        tokenHash: AuthService.hashRefreshToken(token),
         userId,
         expiresAt: new Date(
           Date.now() + this.config.refreshExpiresInSeconds * 1000,
         ),
       },
+      select: { id: true },
     });
 
-    return { accessToken, refreshToken };
+    return { token, id: row.id };
   }
 
   /** SHA-256, not bcrypt: the input is already 256 bits of entropy, so a slow
