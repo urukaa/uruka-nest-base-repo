@@ -7,6 +7,7 @@
   "license": "UNLICENSED",
   "packageManager": "pnpm@11.22.0",
   "scripts": {
+    "preinstall": "node scripts/only-pnpm.js",
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",

@@ -33,6 +33,18 @@ cp example.env .env
 > listed explicitly in `pnpm-workspace.yaml` — add to `allowBuilds` when you
 > introduce a native dependency, or it will fail at runtime rather than install.
 
+A `preinstall` guard rejects `npm install`, because a flat `node_modules` would
+silently undo pnpm's protection against importing undeclared packages. Note that
+npm writes that flat tree *before* the guard aborts it, so if you hit the guard,
+clean up rather than just re-running:
+
+```powershell
+rm -rf node_modules; pnpm install
+```
+
+`npm run <script>` stays safe — there npm is only a task runner, and the
+binaries in `node_modules/.bin` work the same either way.
+
 Fill in `.env`. Two groups are validated lazily rather than at boot:
 
 - `R2_*` — checked the first time `R2Service` is used.
