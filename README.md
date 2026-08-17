@@ -51,12 +51,15 @@ Fill in `.env`. Two groups are validated lazily rather than at boot:
 - `APP_KEY` / `APP_SECRET` / `APP_NAME` — only required when
   `IS_VO1D_TESTING=mboten`, i.e. when request signing is enforced.
 
-Everything else is required at boot. Then:
+Everything else is required at boot. Then apply the schema to your database:
 
 ```powershell
-pnpm exec prisma generate
 pnpm exec prisma migrate dev --name <migration_name>
 ```
+
+`prisma generate` runs automatically as a `postinstall` hook, so the client is
+already in place after `pnpm install`. Run it by hand only after editing
+`schema.prisma` without creating a migration.
 
 ## Running The App
 
