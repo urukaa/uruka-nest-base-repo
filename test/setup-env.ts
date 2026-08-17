@@ -1,3 +1,7 @@
+// A real .env wins where it exists — otherwise DB-backed specs would be sent
+// at a database that does not exist even on a machine that has one.
+import 'dotenv/config';
+
 /**
  * Baseline environment for the test suite so it runs on a fresh clone with no
  * .env present. Only fills gaps, except for the testing toggle which is forced

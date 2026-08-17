@@ -95,6 +95,54 @@ Specs live in `test/` and are collected from `src/` too. `test/setup-env.ts`
 supplies a baseline environment, so the suite runs on a fresh clone with no
 `.env` present.
 
+## Auth
+
+| Endpoint             | Notes                                            |
+| -------------------- | ------------------------------------------------ |
+| `POST /api/auth/register` | Returns the user plus an access/refresh pair |
+| `POST /api/auth/login`    | Same shape; rate-limited to 5/min per IP     |
+| `GET  /api/auth/me`       | Requires `Authorization: Bearer <accessToken>` |
+
+Two token types, on purpose:
+
+- **access token** — a signed JWT, short-lived, **not revocable**. Keep
+  `JWT_EXPIRE_IN` small; expiry is the only thing that ends it.
+- **refresh token** — an opaque random string with a row in `refresh_tokens`.
+  Only its SHA-256 is stored, so a database leak yields no usable session, and
+  the row is what makes revocation possible at all.
+
+Login answers identically for a wrong password, an unknown username, and an
+account that belongs to an external provider. Anything more specific turns the
+endpoint into a username oracle. The real reason is written to the Winston log.
+
+### Adding an external provider
+
+Every path ends at the same two methods, so a provider only has to verify a
+token and hand over the claims:
+
+```ts
+@Post('clerk/session')            // add to SecurityMiddleware.openPaths
+async clerkSession(@Body() body: { token: string }) {
+  const claims = await verifyClerkToken(body.token);   // provider-specific
+  const user = await this.auth.linkExternalUser({
+    provider: AuthProvider.CLERK,
+    externalId: claims.sub,
+    username: claims.email,
+  });
+  return this.auth.issueTokens(user.id, user.username, user.role);
+}
+```
+
+`linkExternalUser` upserts on `externalId`, so the same account is reused on
+every login and never gets a password. `User.id` stays numeric and
+provider-independent — foreign keys never point at a vendor's identifier.
+
+> [!NOTE]
+> A default Clerk session token carries only `sub`; email and name require a
+> JWT template configured in the Clerk dashboard. Clerk also uses `azp` rather
+> than `aud`, and validating it against your known origins is required — not
+> doing so leaves you open to CSRF.
+
 ## Module map
 
 ```

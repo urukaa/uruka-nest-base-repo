@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { CommonModule } from './common/common.module';
 import { HealthyCheckModule } from './healthy_check/healthycheck.module';
 import { MiddlewareModule } from './middleware/middleware.module';
+import { AuthModule } from './auth/auth.module';
 import { envNumber } from './common/env';
 import jwtConfig from './auth/config/jwt.config';
 import r2Config from './config/r2.config';
@@ -31,6 +32,7 @@ import r2Config from './config/r2.config';
 
     CommonModule,
     MiddlewareModule,
+    AuthModule,
     HealthyCheckModule,
   ],
   controllers: [],

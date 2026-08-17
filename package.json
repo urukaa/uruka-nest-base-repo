@@ -105,6 +105,12 @@
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^src/(.*)$": "<rootDir>/src/$1"
-    }
+    },
+    "globalSetup": "<rootDir>/test/global-setup.ts",
+    "testPathIgnorePatterns": [
+      "<rootDir>/test/setup-env.ts",
+      "<rootDir>/test/global-setup.ts",
+      "<rootDir>/test/db.ts"
+    ]
   }
 }

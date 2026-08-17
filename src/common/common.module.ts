@@ -1,5 +1,7 @@
 import { Global, Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { WinstonModule } from 'nest-winston';
+import r2Config from 'src/config/r2.config';
 import * as winston from 'winston';
 import { PrismaService } from './prisma.service';
 import { ValidationService } from './validation.service';
@@ -7,12 +9,14 @@ import { ErrorFilter } from './error.filter';
 import { APP_FILTER } from '@nestjs/core';
 import { R2Service } from './r2.service';
 
-// ConfigModule.forRoot is intentionally absent: AppModule already registers it
-// globally with the namespaced configs, and a second forRoot here registered a
-// competing ConfigService that had never loaded jwtConfig/r2Config.
+// forFeature, never forRoot: a second forRoot here would register a competing
+// ConfigService that had never loaded the namespaced configs. forFeature only
+// adds r2Config to this module's context, which is what makes CommonModule
+// importable on its own — by a test, or by a feature module in isolation.
 @Global()
 @Module({
   imports: [
+    ConfigModule.forFeature(r2Config),
     WinstonModule.forRoot({
       format: winston.format.json(),
       transports: [new winston.transports.Console()],

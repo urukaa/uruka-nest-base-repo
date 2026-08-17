@@ -3,6 +3,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigType } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
 import jwtConfig from './config/jwt.config';
 
 // forFeature keeps this module self-contained: it can be imported by a feature
@@ -22,7 +24,8 @@ const JwtConfigModule = ConfigModule.forFeature(jwtConfig);
       }),
     }),
   ],
-  providers: [JwtStrategy],
-  exports: [JwtModule, PassportModule],
+  controllers: [AuthController],
+  providers: [JwtStrategy, AuthService],
+  exports: [JwtModule, PassportModule, AuthService],
 })
 export class AuthModule {}

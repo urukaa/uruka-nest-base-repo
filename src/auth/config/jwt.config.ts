@@ -4,7 +4,10 @@ import { registerAs } from '@nestjs/config';
 // JwtSignOptions extends jsonwebtoken's SignOptions, so the type is identical
 // without importing a package this project never declared.
 import type { JwtSignOptions } from '@nestjs/jwt';
-import { requireEnv } from 'src/common/env';
+import { envNumber, requireEnv } from 'src/common/env';
+
+/** 30 days. Refresh tokens are revocable, so a long life is safe here. */
+const DEFAULT_REFRESH_SECONDS = 60 * 60 * 24 * 30;
 
 /** `ms`-style durations accepted by jsonwebtoken, e.g. `30m`, `7d`. */
 const DURATION_PATTERN = /^\d+(\.\d+)?\s*(ms|s|m|h|d|w|y)$/i;
@@ -38,5 +41,12 @@ export default registerAs('jwt', () => {
     expiresIn = raw as ExpiresIn;
   }
 
-  return { secret, signOptions: { expiresIn } };
+  return {
+    secret,
+    signOptions: { expiresIn },
+    refreshExpiresInSeconds: envNumber(
+      'REFRESH_EXPIRE_IN',
+      DEFAULT_REFRESH_SECONDS,
+    ),
+  };
 });
