@@ -1,12 +1,15 @@
 // src/auth/config/jwt.config.ts
 import { registerAs } from '@nestjs/config';
-import type { SignOptions } from 'jsonwebtoken';
+// Via @nestjs/jwt (a declared dependency) rather than jsonwebtoken directly:
+// JwtSignOptions extends jsonwebtoken's SignOptions, so the type is identical
+// without importing a package this project never declared.
+import type { JwtSignOptions } from '@nestjs/jwt';
 import { requireEnv } from 'src/common/env';
 
 /** `ms`-style durations accepted by jsonwebtoken, e.g. `30m`, `7d`. */
 const DURATION_PATTERN = /^\d+(\.\d+)?\s*(ms|s|m|h|d|w|y)$/i;
 
-type ExpiresIn = NonNullable<SignOptions['expiresIn']>;
+type ExpiresIn = NonNullable<JwtSignOptions['expiresIn']>;
 
 export default registerAs('jwt', () => {
   const secret = requireEnv('JWT_SECRET');

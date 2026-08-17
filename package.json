@@ -42,6 +42,7 @@
     "rxjs": "^7.8.1",
     "swagger-ui-express": "^5.0.1",
     "uuid": "^11.1.0",
+    "winston": "^3.19.0",
     "zod": "^4.0.17"
   },
   "devDependencies": {
