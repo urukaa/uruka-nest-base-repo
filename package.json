@@ -36,6 +36,7 @@
     "bcrypt": "^6.0.0",
     "dotenv": "^17.4.2",
     "helmet": "^8.3.0",
+    "jose": "^6.2.9",
     "multer": "^2.0.2",
     "multer-s3": "^3.0.1",
     "nest-winston": "^1.10.2",
@@ -96,7 +97,14 @@
       "<rootDir>/test/setup-env.ts"
     ],
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "allowJs": true
+          }
+        }
+      ]
     },
     "collectCoverageFrom": [
       "src/**/*.(t|j)s"
@@ -111,6 +119,9 @@
       "<rootDir>/test/setup-env.ts",
       "<rootDir>/test/global-setup.ts",
       "<rootDir>/test/db.ts"
+    ],
+    "transformIgnorePatterns": [
+      "node_modules/(?!.*jose)"
     ]
   }
 }

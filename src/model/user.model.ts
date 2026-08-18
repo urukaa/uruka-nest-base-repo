@@ -69,6 +69,14 @@ export class RefreshTokenReq {
   refreshToken!: string;
 }
 
+export class ExternalSessionReq {
+  @ApiProperty({
+    description:
+      'A session token from the configured provider (Clerk, Auth0, …).',
+  })
+  token!: string;
+}
+
 export class UpdateUserReq {
   @ApiPropertyOptional({ example: 'gentoled' })
   name?: string;

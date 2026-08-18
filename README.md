@@ -115,33 +115,41 @@ Login answers identically for a wrong password, an unknown username, and an
 account that belongs to an external provider. Anything more specific turns the
 endpoint into a username oracle. The real reason is written to the Winston log.
 
-### Adding an external provider
+### External providers
 
-Every path ends at the same two methods, so a provider only has to verify a
-token and hand over the claims:
+`POST /api/auth/external/session` takes a provider's token, verifies it against
+that provider's JWKS, and returns **our** access/refresh pair. After that call
+the provider is out of the picture — nothing downstream knows it exists.
 
-```ts
-@Post('clerk/session')            // add to SecurityMiddleware.openPaths
-async clerkSession(@Body() body: { token: string }) {
-  const claims = await verifyClerkToken(body.token);   // provider-specific
-  const user = await this.auth.linkExternalUser({
-    provider: AuthProvider.CLERK,
-    externalId: claims.sub,
-    username: claims.email,
-  });
-  return this.auth.issueTokens(user.id, user.username, user.role);
-}
+It is provider-agnostic by construction: Clerk, Auth0, Supabase, Firebase,
+Cognito and Keycloak all issue RS256 JWTs over JWKS, so switching is a change of
+configuration rather than of code. Fill in four variables and the route is live;
+leave `AUTH_EXTERNAL_JWKS_URL` empty and it answers 503.
+
+```bash
+AUTH_EXTERNAL_JWKS_URL=https://clerk.your-app.com/.well-known/jwks.json
+AUTH_EXTERNAL_ISSUER=https://clerk.your-app.com
+AUTH_EXTERNAL_AUTHORIZED_PARTIES=https://app.yourdomain.com
+AUTH_EXTERNAL_USERNAME_CLAIM=email
 ```
 
-`linkExternalUser` upserts on `externalId`, so the same account is reused on
-every login and never gets a password. `User.id` stays numeric and
+Users are provisioned on first login and matched on `externalId` afterwards, so
+the row is reused and never gets a password. `User.id` stays numeric and
 provider-independent — foreign keys never point at a vendor's identifier.
 
-> [!NOTE]
-> A default Clerk session token carries only `sub`; email and name require a
-> JWT template configured in the Clerk dashboard. Clerk also uses `azp` rather
-> than `aud`, and validating it against your known origins is required — not
-> doing so leaves you open to CSRF.
+The endpoint is **not** in `SecurityMiddleware.openPaths`: your BFF calls it
+like any other endpoint, signature included. Only a redirect arriving straight
+from a provider — an OAuth callback — needs to bypass signing.
+
+> [!IMPORTANT]
+> **Clerk needs a JWT template.** A default session token carries only `sub`,
+> so `email` and `name` are absent until you configure one in the dashboard.
+> The endpoint rejects such a token rather than falling back to `sub`, which
+> would otherwise fill your table with users named `user_2abc...`.
+>
+> Clerk also puts the calling origin in `azp`, not `aud`. Leaving
+> `AUTH_EXTERNAL_AUTHORIZED_PARTIES` empty skips that check — which Clerk's own
+> docs describe as a CSRF exposure.
 
 ## Module map
 

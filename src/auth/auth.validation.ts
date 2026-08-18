@@ -29,8 +29,15 @@ export class AuthValidation {
   static readonly REFRESH = z.object({
     refreshToken: z.string().min(1),
   });
+
+  static readonly EXTERNAL_SESSION = z.object({
+    token: z.string().min(1),
+  });
 }
 
 export type RegisterRequest = z.infer<typeof AuthValidation.REGISTER>;
 export type LoginRequest = z.infer<typeof AuthValidation.LOGIN>;
 export type RefreshRequest = z.infer<typeof AuthValidation.REFRESH>;
+export type ExternalSessionRequest = z.infer<
+  typeof AuthValidation.EXTERNAL_SESSION
+>;

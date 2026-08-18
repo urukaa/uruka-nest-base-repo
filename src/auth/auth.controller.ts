@@ -10,8 +10,12 @@ import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import { AuthService } from './auth.service';
+import { ExternalAuthService } from './external-auth.service';
+import { AuthValidation } from './auth.validation';
 import { JwtAuthGuard } from './guards/jwt-auth/jwt-auth.guard';
+import { ValidationService } from 'src/common/validation.service';
 import {
+  ExternalSessionReq,
   LoginUserReq,
   RefreshTokenReq,
   RegisterUserReq,
@@ -21,7 +25,11 @@ import { AuthenticatedUser } from './types/auth.jwtPayload';
 @ApiTags('Auth')
 @Controller('api/auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly externalAuth: ExternalAuthService,
+    private readonly validation: ValidationService,
+  ) {}
 
   @Post('register')
   @HttpCode(201)
@@ -68,6 +76,40 @@ export class AuthController {
   @ApiBearerAuth()
   logoutAll(@CurrentUser() user: AuthenticatedUser) {
     return this.authService.revokeAllForUser(user.id);
+  }
+
+  /**
+   * Exchanges a provider token for our own session — the API stays the
+   * authority, and the provider never appears again after this call.
+   *
+   * Not in SecurityMiddleware.openPaths: the BFF calls this like any other
+   * endpoint, signature included. Only a redirect arriving straight from a
+   * provider (an OAuth callback) needs to bypass signing.
+   */
+  @Post('external/session')
+  @HttpCode(200)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiBody({ type: ExternalSessionReq })
+  async externalSession(@Body() body: unknown) {
+    const dto = this.validation.validate(AuthValidation.EXTERNAL_SESSION, body);
+
+    const identity = await this.externalAuth.verify(dto.token);
+
+    const user = await this.authService.linkExternalUser({
+      provider: this.externalAuth.providerName,
+      externalId: identity.externalId,
+      username: identity.username,
+      name: identity.name,
+    });
+
+    return {
+      user,
+      ...(await this.authService.issueTokens(
+        user.id,
+        user.username,
+        user.role,
+      )),
+    };
   }
 
   @Get('me')
