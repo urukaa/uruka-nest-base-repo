@@ -9,7 +9,6 @@ import r2Config from 'src/config/r2.config';
 import { v4 as uuidv4 } from 'uuid';
 
 type R2Config = ConfigType<typeof r2Config>;
-type ResolvedR2Config = { [K in keyof R2Config]: string };
 
 @Injectable()
 export class R2Service {
@@ -23,8 +22,12 @@ export class R2Service {
   /**
    * Config is validated on first use rather than in the constructor, so a
    * project that never touches object storage still boots without R2_* set.
+   *
+   * The return type is unchanged on purpose: every field is already `string`,
+   * and TypeScript cannot express "checked to be non-empty". The guarantee here
+   * is the runtime check below, not the signature.
    */
-  private resolveConfig(): ResolvedR2Config {
+  private resolveConfig(): R2Config {
     const missing = (
       ['accessKeyId', 'secretAccessKey', 'endpoint', 'bucket', 'url'] as const
     ).filter((key) => !this.config[key]);
@@ -36,7 +39,7 @@ export class R2Service {
       );
     }
 
-    return this.config as ResolvedR2Config;
+    return this.config;
   }
 
   private get s3(): S3Client {
