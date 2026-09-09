@@ -226,19 +226,34 @@ When `IS_VO1D_TESTING=mboten`, every route outside `SecurityMiddleware`'s
 | `x-signature` | see below                                 |
 | `User-Agent`  | non-empty; `Vo1dApp` in production        |
 
-The signature is `HMAC-SHA256(APP_SECRET, "<timestamp>:<APP_NAME>")` in hex:
+The signature is `HMAC-SHA256(APP_SECRET, canonical)` in hex, where `canonical`
+is these five fields joined by a newline:
 
-```js
-const signature = crypto
-  .createHmac('sha256', APP_SECRET)
-  .update(`${timestamp}:${APP_NAME}`)
-  .digest('hex');
+```
+METHOD
+/path/without/query
+x-timestamp
+APP_NAME
+sha256(raw request body)     # sha256 of "" when there is no body
 ```
 
-Note that the signature is **not bound to the endpoint** — it covers only the
-timestamp and app name, so one signature is valid for any route inside the
-window. What actually constrains it is the IP allowlist below. Keep that in mind
-before exposing this API to a caller you do not control.
+```js
+// One variable, used for both. Calling JSON.stringify twice can reorder keys,
+// and then the hash no longer matches the bytes actually sent.
+const raw = JSON.stringify(payload);
+const bodyHash = crypto.createHash('sha256').update(raw ?? '').digest('hex');
+
+const canonical = ['POST', '/api/thing', timestamp, APP_NAME, bodyHash].join('
+');
+const signature = crypto.createHmac('sha256', APP_SECRET).update(canonical).digest('hex');
+
+await fetch(url, { method: 'POST', body: raw, headers: { /* ... */ } });
+```
+
+Binding method, path and body means a captured signature is useless anywhere
+else: it cannot be replayed against another route, another verb, or the same
+route with altered content. The query string is deliberately excluded — the
+server strips it before building the canonical string, so sign the bare path.
 
 The request IP must appear in `ALLOWED_IPS` (defaults to localhost). Behind a
 reverse proxy, set `TRUST_PROXY` so `req.ip` is the client rather than the

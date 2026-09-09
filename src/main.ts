@@ -11,7 +11,11 @@ import { envList, isProduction, optionalEnv, requireEnv } from './common/env';
 async function bootstrap() {
   displayAsciiArt(appBanner);
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // rawBody: SecurityMiddleware hashes the bytes as sent. Re-serialising
+  // req.body would reorder keys and never match what the caller signed.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    rawBody: true,
+  });
 
   //  LOGGING
   const logger = app.get<LoggerService>(WINSTON_MODULE_NEST_PROVIDER);

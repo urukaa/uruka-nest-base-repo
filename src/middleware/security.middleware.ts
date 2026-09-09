@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NestMiddleware } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NestMiddleware,
+  RawBodyRequest,
+} from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import * as crypto from 'crypto';
 import {
@@ -76,7 +81,7 @@ export class SecurityMiddleware implements NestMiddleware {
     }, false);
   }
 
-  use(req: Request, res: Response, next: NextFunction) {
+  use(req: RawBodyRequest<Request>, res: Response, next: NextFunction) {
     if (this.bypass) {
       return next(); // bypass
     }
@@ -128,7 +133,21 @@ export class SecurityMiddleware implements NestMiddleware {
     //  Cek Signature
     if (!signature) throw new ForbiddenException('Missing signature.');
 
-    const rawString = `${timestamp}:${this.appName}`;
+    // Bound to this exact request. Covering only timestamp + appName would let
+    // a signature captured from any endpoint be replayed against every other
+    // one for the length of the window.
+    const bodyHash = crypto
+      .createHash('sha256')
+      .update(req.rawBody ?? Buffer.alloc(0))
+      .digest('hex');
+
+    const rawString = [
+      req.method.toUpperCase(),
+      requestPath,
+      timestamp,
+      this.appName,
+      bodyHash,
+    ].join('\n');
 
     if (!this.signatureMatches(signature, rawString)) {
       throw new ForbiddenException('Invalid signature.');

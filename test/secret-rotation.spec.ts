@@ -14,10 +14,15 @@ const APP_NAME = 'rotation-app';
 const USER_AGENT = 'PostmanRuntime/7.0.0';
 
 function sign(timestamp: string, secret: string) {
-  return crypto
-    .createHmac('sha256', secret)
-    .update(`${timestamp}:${APP_NAME}`)
-    .digest('hex');
+  const canonical = [
+    'GET',
+    '/api/example',
+    timestamp,
+    APP_NAME,
+    crypto.createHash('sha256').update('').digest('hex'),
+  ].join('\n');
+
+  return crypto.createHmac('sha256', secret).update(canonical).digest('hex');
 }
 
 describe('Secret rotation', () => {

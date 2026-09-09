@@ -11,10 +11,20 @@ const APP_SECRET = 'test-app-secret';
 const APP_NAME = 'test-app';
 const USER_AGENT = 'PostmanRuntime/7.0.0';
 
+// Signatures are bound to method, path and body — see signature-binding.spec.
+// Every call here is a bodyless GET /api/example.
 function sign(timestamp: string) {
+  const canonical = [
+    'GET',
+    '/api/example',
+    timestamp,
+    APP_NAME,
+    crypto.createHash('sha256').update('').digest('hex'),
+  ].join('\n');
+
   return crypto
     .createHmac('sha256', APP_SECRET)
-    .update(`${timestamp}:${APP_NAME}`)
+    .update(canonical)
     .digest('hex');
 }
 
