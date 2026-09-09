@@ -1,4 +1,10 @@
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  PayloadTooLargeException,
+  UnsupportedMediaTypeException,
+} from '@nestjs/common';
 import {
   S3Client,
   PutObjectCommand,
@@ -73,10 +79,36 @@ export class R2Service {
     return cleaned || 'file';
   }
 
-  async uploadFile(file: Express.Multer.File) {
+  /**
+   * Second line of defence. MulterModule already rejects oversized bodies
+   * before they are buffered, which is where the real protection lives — but
+   * this service is public API, and a caller that builds a file object by hand
+   * bypasses multer entirely.
+   */
+  private assertAcceptable(file: Express.Multer.File): void {
     if (!file?.buffer?.length) {
       throw new BadRequestException('Empty file upload.');
     }
+
+    const { maxUploadBytes, allowedMimeTypes } = this.config;
+
+    if (file.buffer.length > maxUploadBytes) {
+      throw new PayloadTooLargeException(
+        `File exceeds the ${Math.round(maxUploadBytes / 1024 / 1024)}MB limit.`,
+      );
+    }
+
+    // The client controls this header, so it is a usability check rather than
+    // a security boundary. Sniff the magic bytes if you need certainty.
+    if (allowedMimeTypes.length && !allowedMimeTypes.includes(file.mimetype)) {
+      throw new UnsupportedMediaTypeException(
+        `Unsupported type "${file.mimetype}". Allowed: ${allowedMimeTypes.join(', ')}.`,
+      );
+    }
+  }
+
+  async uploadFile(file: Express.Multer.File) {
+    this.assertAcceptable(file);
 
     const { bucket, url } = this.resolveConfig();
     const key = `${uuidv4()}-${Date.now()}-${R2Service.sanitizeFilename(file.originalname)}`;

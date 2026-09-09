@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigType } from '@nestjs/config';
+import { MulterModule } from '@nestjs/platform-express';
 import { WinstonModule } from 'nest-winston';
 import r2Config from 'src/config/r2.config';
 import * as winston from 'winston';
@@ -17,6 +18,20 @@ import { R2Service } from './r2.service';
 @Module({
   imports: [
     ConfigModule.forFeature(r2Config),
+
+    // registerAsync, not register: the limit comes from config, and a
+    // synchronous register() would read it before .env is loaded.
+    //
+    // This is where an oversized upload is actually stopped — multer aborts
+    // the request mid-stream, so the bytes never reach memory. R2Service's
+    // own check runs long after that point.
+    MulterModule.registerAsync({
+      imports: [ConfigModule.forFeature(r2Config)],
+      inject: [r2Config.KEY],
+      useFactory: (config: ConfigType<typeof r2Config>) => ({
+        limits: { fileSize: config.maxUploadBytes },
+      }),
+    }),
     WinstonModule.forRoot({
       format: winston.format.json(),
       transports: [new winston.transports.Console()],

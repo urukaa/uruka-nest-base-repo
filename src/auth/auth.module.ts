@@ -6,6 +6,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { ExternalAuthService } from './external-auth.service';
+import { RefreshTokenCleanupService } from './refresh-token-cleanup.service';
 import jwtConfig from './config/jwt.config';
 import externalAuthConfig from './config/external-auth.config';
 
@@ -28,7 +29,12 @@ const JwtConfigModule = ConfigModule.forFeature(jwtConfig);
     }),
   ],
   controllers: [AuthController],
-  providers: [JwtStrategy, AuthService, ExternalAuthService],
+  providers: [
+    JwtStrategy,
+    AuthService,
+    ExternalAuthService,
+    RefreshTokenCleanupService,
+  ],
   exports: [JwtModule, PassportModule, AuthService, ExternalAuthService],
 })
 export class AuthModule {}

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { CommonModule } from './common/common.module';
 import { HealthyCheckModule } from './healthy_check/healthycheck.module';
@@ -29,6 +30,9 @@ import r2Config from './config/r2.config';
         ],
       }),
     }),
+
+    // Drives the refresh-token cleanup cron in AuthModule.
+    ScheduleModule.forRoot(),
 
     CommonModule,
     MiddlewareModule,
