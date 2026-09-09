@@ -6,6 +6,7 @@ import {
   envNumber,
   isProduction,
   isTesting,
+  optionalEnv,
   requireEnv,
 } from 'src/common/env';
 
@@ -44,9 +45,36 @@ export class SecurityMiddleware implements NestMiddleware {
 
   // Only required when enforcement is actually on, so a local clone running
   // with IS_VO1D_TESTING=nggih never needs signing credentials at all.
-  private readonly appKey = this.bypass ? '' : requireEnv('APP_KEY');
-  private readonly secretKey = this.bypass ? '' : requireEnv('APP_SECRET');
   private readonly appName = this.bypass ? '' : requireEnv('APP_NAME');
+
+  private readonly appKeys = this.acceptedValues('APP_KEY');
+  private readonly secretKeys = this.acceptedValues('APP_SECRET');
+
+  private acceptedValues(name: string): string[] {
+    if (this.bypass) return [];
+
+    return [requireEnv(name), optionalEnv(`${name}_PREVIOUS`, '')].filter(
+      Boolean,
+    );
+  }
+
+  private matchesAny(candidate: string, accepted: string[]): boolean {
+    return accepted.reduce(
+      (matched, value) => safeEqual(candidate, value) || matched,
+      false,
+    );
+  }
+
+  private signatureMatches(signature: string, rawString: string): boolean {
+    return this.secretKeys.reduce((matched, secret) => {
+      const expected = crypto
+        .createHmac('sha256', secret)
+        .update(rawString)
+        .digest('hex');
+
+      return safeEqual(signature, expected) || matched;
+    }, false);
+  }
 
   use(req: Request, res: Response, next: NextFunction) {
     if (this.bypass) {
@@ -68,7 +96,7 @@ export class SecurityMiddleware implements NestMiddleware {
     const signature = req.headers['x-signature'] as string;
     const userAgent = req.headers['user-agent'];
 
-    if (!appKey || !safeEqual(appKey, this.appKey)) {
+    if (!appKey || !this.matchesAny(appKey, this.appKeys)) {
       throw new ForbiddenException('Unauthorized. Invalid app key.');
     }
 
@@ -102,12 +130,7 @@ export class SecurityMiddleware implements NestMiddleware {
 
     const rawString = `${timestamp}:${this.appName}`;
 
-    const expectedSignature = crypto
-      .createHmac('sha256', this.secretKey)
-      .update(rawString)
-      .digest('hex');
-
-    if (!safeEqual(signature, expectedSignature)) {
+    if (!this.signatureMatches(signature, rawString)) {
       throw new ForbiddenException('Invalid signature.');
     }
 

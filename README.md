@@ -97,11 +97,25 @@ supplies a baseline environment, so the suite runs on a fresh clone with no
 
 ## Auth
 
-| Endpoint             | Notes                                            |
-| -------------------- | ------------------------------------------------ |
-| `POST /api/auth/register` | Returns the user plus an access/refresh pair |
-| `POST /api/auth/login`    | Same shape; rate-limited to 5/min per IP     |
-| `GET  /api/auth/me`       | Requires `Authorization: Bearer <accessToken>` |
+| Endpoint                        | Notes                                          |
+| ------------------------------- | ---------------------------------------------- |
+| `POST /api/auth/register`       | Returns the user plus an access/refresh pair   |
+| `POST /api/auth/login`          | Same shape; 20/min per IP                      |
+| `POST /api/auth/refresh`        | Rotates the pair; 60/min per IP                |
+| `POST /api/auth/logout`         | Revokes one session, always 204                |
+| `POST /api/auth/logout-all`     | Revokes every session for the caller           |
+| `POST /api/auth/external/session` | Exchanges a provider token — see below       |
+| `GET  /api/auth/me`             | Requires `Authorization: Bearer <accessToken>` |
+
+> [!NOTE]
+> Those limits key on **IP**, and behind a BFF every user shares one — so they
+> cap the whole application, not an individual attacker. Sized accordingly. To
+> limit per account instead, override `ThrottlerGuard#getTracker`.
+
+Refresh tokens rotate on use: presenting one spends it and issues a new pair. A
+token replayed after rotation means a copy exists somewhere, so **every** session
+for that user is revoked. Expired rows are deleted nightly — see
+`RefreshTokenCleanupService`.
 
 Two token types, on purpose:
 
@@ -157,21 +171,22 @@ from a provider — an OAuth callback — needs to bypass signing.
 AppModule
 ├─ ConfigModule      (global; loads jwtConfig + r2Config)
 ├─ ThrottlerModule   (rate limit per IP, enforced by a global guard)
-├─ CommonModule      (@Global: PrismaService, ValidationService, R2Service, ErrorFilter)
+├─ ScheduleModule    (drives the refresh-token cleanup cron)
+├─ CommonModule      (@Global: Prisma, Validation, R2, Multer limits, ErrorFilter)
 ├─ MiddlewareModule  (SecurityMiddleware on every route)
+├─ AuthModule        (login, sessions, external providers)
 └─ HealthyCheckModule
 ```
 
-Two modules are **intentionally not wired** into `AppModule`:
+`AuthModule` sits directly under `AppModule` because authentication is its own
+concern, not part of user management — it owns session rotation, revocation and
+provider federation. A `UserModule` should import it as well, for `JwtAuthGuard`
+and `AuthService`; both imports are correct and Nest instantiates it once.
 
-| Module          | Why                                                                                                                                                      |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AuthModule`    | Import it from your feature module — typically `UserModule`. Self-contained via `ConfigModule.forFeature`; exports `JwtModule` + `PassportModule`.         |
-| `ExampleModule` | Scaffold to copy when starting a new feature module.                                                                                                       |
-
-Both are covered by compile-smoke specs (`test/auth.module.spec.ts`,
-`test/example.module.spec.ts`) so their wiring stays verified even though
-nothing imports them at runtime.
+`ExampleModule` is **intentionally not wired** — it is the scaffold to copy when
+starting a new feature module. A compile-smoke spec
+(`test/example.module.spec.ts`) keeps its wiring verified even though nothing
+imports it at runtime.
 
 ## Environment toggles
 
@@ -229,6 +244,31 @@ The request IP must appear in `ALLOWED_IPS` (defaults to localhost). Behind a
 reverse proxy, set `TRUST_PROXY` so `req.ip` is the client rather than the
 proxy — leave it empty otherwise, since it makes `X-Forwarded-For` spoofable,
 and the IP allowlist is what this scheme leans on.
+
+## Rotating APP_KEY / APP_SECRET
+
+Both credentials have a second slot, `*_PREVIOUS`. Both values are accepted;
+only the current one is used for signing.
+
+| Deploy | `APP_SECRET` | `APP_SECRET_PREVIOUS` | Effect |
+| ------ | ------------ | --------------------- | ------ |
+| before | old          | *(empty)*             | only old works |
+| 1. API | **new**      | old                   | both work — BFF is still on old |
+| 2. BFF | new          | old                   | BFF switches over |
+| 3. API | new          | *(empty)*             | old is dead |
+
+Nothing has to happen simultaneously, which is the point. With a single slot,
+the API and every caller must switch in the same instant or all signed requests
+are rejected — so rotation becomes a scheduled outage, gets postponed, and a
+possibly-leaked secret stays live.
+
+No waiting period is needed between steps 2 and 3: signatures are recomputed on
+every request, so nothing outlives the switch. `JWT_SECRET` would be different —
+already-issued tokens are signed with the old key, so its acceptance window has
+to be at least `JWT_EXPIRE_IN`.
+
+Both keys are checked without short-circuiting, so response time does not reveal
+which one matched.
 
 ## Error responses
 
